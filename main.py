@@ -2,10 +2,11 @@ import pandas as pd
 import time
 import os
 import sys
-from get_gpt import ChatGPT as gpt
-from get_gpt import schema_linking_prompt
+
+from get_gpt import schema_linking_prompt, gpt_completion, gpt_completion_with_backoff
 
 os.chdir(sys.path[0])
+
 
 def test_1():
     model = "c_model"
@@ -91,7 +92,6 @@ if __name__ == '__main__':
     DATASET_SCHEMA = "./data/spider/tables.json"
     DATASET = "./data/spider/dev.json"
     OUTPUT_FILE = "./output/qt_predicted_sql.txt"
-    model = "c_model"
     spider_schema, spider_primary, spider_foreign = creatiing_schema(DATASET_SCHEMA)
     val_df = load_data(DATASET)
     print(f"Number of data samples {val_df.shape[0]}")
@@ -103,16 +103,14 @@ if __name__ == '__main__':
         print(row['query'])
         print(row['question'])
         schema_links = None
-        while schema_links is None:
-            try:
-                s_promt = schema_linking_prompt_maker(row['question'], row['db_id'])
-                # schema_links = GPT4_generation(s_promt)
-                # prompt = gpt.get_prompt(s_promt)
-                response = gpt.request_basic_model(s_promt, model, debug=False)
-                schema_links = gpt.parse_basic_model_response(response)
-            except:
-                # time.sleep(3)
-                pass
+        # while schema_links is None:
+        #     try:
+        s_promt = schema_linking_prompt_maker(row['question'], row['db_id'])
+        schema_links = gpt_completion_with_backoff(s_promt)
+        # schema_links = gpt_completion(s_promt)
+            # except:
+        time.sleep(3)
+            #     pass
         try:
             schema_links = schema_links.split("Schema_links: ")[1]
         except:
@@ -120,7 +118,7 @@ if __name__ == '__main__':
             schema_links = "[]"
         print(schema_links)
         count += 1
-        if count == 5: 
+        if count == 3: 
             break
     
 

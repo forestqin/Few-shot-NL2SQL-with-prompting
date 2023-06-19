@@ -1,19 +1,32 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 ########################################################################
-import openai
 import os
 import sys
 import requests
 import json
+import openai
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_random_exponential,
+)  # for exponential backoff
+
+
+API_KEY = os.getenv("OPENAI_API_KEY")
+openai.api_key = API_KEY
+
+
 QIAOJIANG_API = "http://qiaojiang.baidu-int.com/entry/common"
 QIAOJIANG_USER = "impl"
 QIAOJIANG_PWD = "LZ0fPkRKLjiPL1aK"
 HTTP_HEADERS = {'content-type': 'application/json'}
+model = "c_model"
+USE_BD = False
 
-class ChatGPT :
+
+class ChatGPT:
     
     def get_prompt(question):
         tables_summary = f"""
@@ -57,7 +70,7 @@ class ChatGPT :
     def request_basic_model(user_input_prompt,
                             model="yiyan",
                             debug=False,
-                            max_tokens=1000,
+                            max_tokens=4000,
                             temperature=0.0):
 
         # Define the request payload as a dictionary
@@ -105,6 +118,43 @@ class ChatGPT :
             return None
 
         return response_data["body"]["message"]["res"]["text"]
+    
+    def complete(prompt, use_instruction=False):
+        if use_instruction:
+            prompt = ChatGPT.get_prompt(prompt)
+        response = ChatGPT.request_basic_model(prompt, model, debug=False)
+        result = ChatGPT.parse_basic_model_response(response)
+        return result
+
+class GPT4:
+    def complete(prompt):
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            n = 1,
+            stream = False,
+            temperature=0.0,
+            max_tokens=600,
+            top_p = 1.0,
+            frequency_penalty=0.0,
+            presence_penalty=0.0,
+            stop = ["Q:"]
+        )
+        return response['choices'][0]['message']['content']
+
+
+@retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(6))
+def gpt_completion_with_backoff(*args, **kwargs):
+    if USE_BD:
+        return ChatGPT.complete(*args, **kwargs)
+    else:
+        return GPT4.complete(*args, **kwargs)
+    
+def gpt_completion(*args, **kwargs):
+    if USE_BD:
+        return ChatGPT.complete(*args,**kwargs)
+    else:
+        return GPT4.complete(*args,**kwargs)
 
 
 #----------------------------------------------------prompts-----------------------------------------------
@@ -209,18 +259,6 @@ Based on the columns and tables, we need these Foreign_keys = [course.course_id 
 Based on the tables, columns, and Foreign_keys, The set of possible cell values are = [Chandler,Fall,2010]. So the Schema_links are:
 Schema_links: [course.title,course.course_id = SECTION.course_id,SECTION.building,SECTION.year,SECTION.semester,Chandler,Fall,2010]
 
-Table city, columns = [*,City_ID,Official_Name,Status,Area_km_2,Population,Census_Ranking]
-Table competition_record, columns = [*,Competition_ID,Farm_ID,Rank]
-Table farm, columns = [*,Farm_ID,Year,Total_Horses,Working_Horses,Total_Cattle,Oxen,Bulls,Cows,Pigs,Sheep_and_Goats]
-Table farm_competition, columns = [*,Competition_ID,Year,Theme,Host_city_ID,Hosts]
-Foreign_keys = [farm_competition.Host_city_ID = city.City_ID,competition_record.Farm_ID = farm.Farm_ID,competition_record.Competition_ID = farm_competition.Competition_ID]
-Q: "Show the status of the city that has hosted the greatest number of competitions."
-A: Let’s think step by step. In the question "Show the status of the city that has hosted the greatest number of competitions.", we are asked:
-"the status of the city" so we need column = [city.Status]
-"greatest number of competitions" so we need column = [farm_competition.*]
-Based on the columns and tables, we need these Foreign_keys = [farm_competition.Host_city_ID = city.City_ID].
-Based on the tables, columns, and Foreign_keys, The set of possible cell values are = []. So the Schema_links are:
-Schema_links: [city.Status,farm_competition.Host_city_ID = city.City_ID,farm_competition.*]
 
 Table advisor, columns = [*,s_ID,i_ID]
 Table classroom, columns = [*,building,room_number,capacity]
@@ -241,36 +279,6 @@ A: Let’s think step by step. In the question "Find the id of instructors who t
 Based on the columns and tables, we need these Foreign_keys = [].
 Based on the tables, columns, and Foreign_keys, The set of possible cell values are = [Fall,2009,Spring,2010]. So the Schema_links are:
 schema_links: [teaches.id,teaches.semester,teaches.year,Fall,2009,Spring,2010]
-
-Table Accounts, columns = [*,account_id,customer_id,date_account_opened,account_name,other_account_details]
-Table Customers, columns = [*,customer_id,customer_first_name,customer_middle_initial,customer_last_name,gender,email_address,login_name,login_password,phone_number,town_city,state_county_province,country]
-Table Financial_Transactions, columns = [*,transaction_id,account_id,invoice_number,transaction_type,transaction_date,transaction_amount,transaction_comment,other_transaction_details]
-Table Invoice_Line_Items, columns = [*,order_item_id,invoice_number,product_id,product_title,product_quantity,product_price,derived_product_cost,derived_vat_payable,derived_total_cost]
-Table Invoices, columns = [*,invoice_number,order_id,invoice_date]
-Table Order_Items, columns = [*,order_item_id,order_id,product_id,product_quantity,other_order_item_details]
-Table Orders, columns = [*,order_id,customer_id,date_order_placed,order_details]
-Table Product_Categories, columns = [*,production_type_code,product_type_description,vat_rating]
-Table Products, columns = [*,product_id,parent_product_id,production_type_code,unit_price,product_name,product_color,product_size]
-Foreign_keys = [Orders.customer_id = Customers.customer_id,Invoices.order_id = Orders.order_id,Accounts.customer_id = Customers.customer_id,Products.production_type_code = Product_Categories.production_type_code,Financial_Transactions.account_id = Accounts.account_id,Financial_Transactions.invoice_number = Invoices.invoice_number,Order_Items.order_id = Orders.order_id,Order_Items.product_id = Products.product_id,Invoice_Line_Items.product_id = Products.product_id,Invoice_Line_Items.invoice_number = Invoices.invoice_number,Invoice_Line_Items.order_item_id = Order_Items.order_item_id]
-Q: "Show the id, the date of account opened, the account name, and other account detail for all accounts."
-A: Let’s think step by step. In the question "Show the id, the date of account opened, the account name, and other account detail for all accounts.", we are asked:
-"the id, the date of account opened, the account name, and other account detail for all accounts." so we need column = [Accounts.account_id,Accounts.account_name,Accounts.other_account_details,Accounts.date_account_opened]
-Based on the columns and tables, we need these Foreign_keys = [].
-Based on the tables, columns, and Foreign_keys, The set of possible cell values are = []. So the Schema_links are:
-Schema_links: [Accounts.account_id,Accounts.account_name,Accounts.other_account_details,Accounts.date_account_opened]
-
-Table city, columns = [*,City_ID,Official_Name,Status,Area_km_2,Population,Census_Ranking]
-Table competition_record, columns = [*,Competition_ID,Farm_ID,Rank]
-Table farm, columns = [*,Farm_ID,Year,Total_Horses,Working_Horses,Total_Cattle,Oxen,Bulls,Cows,Pigs,Sheep_and_Goats]
-Table farm_competition, columns = [*,Competition_ID,Year,Theme,Host_city_ID,Hosts]
-Foreign_keys = [farm_competition.Host_city_ID = city.City_ID,competition_record.Farm_ID = farm.Farm_ID,competition_record.Competition_ID = farm_competition.Competition_ID]
-Q: "Show the status shared by cities with population bigger than 1500 and smaller than 500."
-A: Let’s think step by step. In the question "Show the status shared by cities with population bigger than 1500 and smaller than 500.", we are asked:
-"the status shared by cities" so we need column = [city.Status]
-"cities with population" so we need column = [city.Population]
-Based on the columns and tables, we need these Foreign_keys = [].
-Based on the tables, columns, and Foreign_keys, The set of possible cell values are = [1500,500]. So the Schema_links are:
-Schema_links: [city.Status,city.Population,1500,500]
 
 '''
 
@@ -535,3 +543,6 @@ Intermediate_representation: select course.title , course.credits from classroom
 SQL: SELECT T3.title ,  T3.credits FROM classroom AS T1 JOIN SECTION AS T2 ON T1.building  =  T2.building AND T1.room_number  =  T2.room_number JOIN course AS T3 ON T2.course_id  =  T3.course_id WHERE T1.capacity  =  (SELECT max(capacity) FROM classroom)
 
 '''
+
+if __name__=="__main__":
+    print(f"{API_KEY=}")
