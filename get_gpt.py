@@ -23,7 +23,7 @@ QIAOJIANG_USER = "impl"
 QIAOJIANG_PWD = "LZ0fPkRKLjiPL1aK"
 HTTP_HEADERS = {'content-type': 'application/json'}
 model = "yiyan"
-USE_BD = True
+USE_BD = False
 
 
 class ChatGPT:

@@ -4,28 +4,9 @@ import openai
 import os
 import sys
 
+os.chdir(sys.path[0])
 
-#----------------------------------------------------prompts-----------------------------------------------
-schema_linking_prompt = '''Table advisor, columns = [*,s_ID,i_ID]
-Table classroom, columns = [*,building,room_number,capacity]
-Table course, columns = [*,course_id,title,dept_name,credits]
-Table department, columns = [*,dept_name,building,budget]
-Table instructor, columns = [*,ID,name,dept_name,salary]
-Table prereq, columns = [*,course_id,prereq_id]
-Table section, columns = [*,course_id,sec_id,semester,year,building,room_number,time_slot_id]
-Table student, columns = [*,ID,name,dept_name,tot_cred]
-Table takes, columns = [*,ID,course_id,sec_id,semester,year,grade]
-Table teaches, columns = [*,ID,course_id,sec_id,semester,year]
-Table time_slot, columns = [*,time_slot_id,day,start_hr,start_min,end_hr,end_min]
-Foreign_keys = [course.dept_name = department.dept_name,instructor.dept_name = department.dept_name,section.building = classroom.building,section.room_number = classroom.room_number,section.course_id = course.course_id,teaches.ID = instructor.ID,teaches.course_id = section.course_id,teaches.sec_id = section.sec_id,teaches.semester = section.semester,teaches.year = section.year,student.dept_name = department.dept_name,takes.ID = student.ID,takes.course_id = section.course_id,takes.sec_id = section.sec_id,takes.semester = section.semester,takes.year = section.year,advisor.s_ID = student.ID,advisor.i_ID = instructor.ID,prereq.prereq_id = course.course_id,prereq.course_id = course.course_id]
-Q: "Find the buildings which have rooms with capacity more than 50."
-A: Let’s think step by step. In the question "Find the buildings which have rooms with capacity more than 50.", we are asked:
-"the buildings which have rooms" so we need column = [classroom.capacity]
-"rooms with capacity" so we need column = [classroom.building]
-Based on the columns and tables, we need these Foreign_keys = [].
-Based on the tables, columns, and Foreign_keys, The set of possible cell values are = [50]. So the Schema_links are:
-Schema_links: [classroom.building,classroom.capacity,50]
-
+schema_linking_prompt_0 = '''
 Table department, columns = [*,Department_ID,Name,Creation,Ranking,Budget_in_Billions,Num_Employees]
 Table head, columns = [*,head_ID,name,born_state,age]
 Table management, columns = [*,department_ID,head_ID,temporary_acting]
@@ -68,6 +49,29 @@ A: Let’s think step by step. In the question "List the id of students who neve
 Based on the columns and tables, we need these Foreign_keys = [Students.student_id = Student_Course_Attendance.student_id].
 Based on the tables, columns, and Foreign_keys, The set of possible cell values are = []. So the Schema_links are:
 Schema_links: [Students.student_id = Student_Course_Attendance.student_id]
+'''
+
+
+#----------------------------------------------------prompts-----------------------------------------------
+schema_linking_prompt = '''Table advisor, columns = [*,s_ID,i_ID]
+Table classroom, columns = [*,building,room_number,capacity]
+Table course, columns = [*,course_id,title,dept_name,credits]
+Table department, columns = [*,dept_name,building,budget]
+Table instructor, columns = [*,ID,name,dept_name,salary]
+Table prereq, columns = [*,course_id,prereq_id]
+Table section, columns = [*,course_id,sec_id,semester,year,building,room_number,time_slot_id]
+Table student, columns = [*,ID,name,dept_name,tot_cred]
+Table takes, columns = [*,ID,course_id,sec_id,semester,year,grade]
+Table teaches, columns = [*,ID,course_id,sec_id,semester,year]
+Table time_slot, columns = [*,time_slot_id,day,start_hr,start_min,end_hr,end_min]
+Foreign_keys = [course.dept_name = department.dept_name,instructor.dept_name = department.dept_name,section.building = classroom.building,section.room_number = classroom.room_number,section.course_id = course.course_id,teaches.ID = instructor.ID,teaches.course_id = section.course_id,teaches.sec_id = section.sec_id,teaches.semester = section.semester,teaches.year = section.year,student.dept_name = department.dept_name,takes.ID = student.ID,takes.course_id = section.course_id,takes.sec_id = section.sec_id,takes.semester = section.semester,takes.year = section.year,advisor.s_ID = student.ID,advisor.i_ID = instructor.ID,prereq.prereq_id = course.course_id,prereq.course_id = course.course_id]
+Q: "Find the buildings which have rooms with capacity more than 50."
+A: Let’s think step by step. In the question "Find the buildings which have rooms with capacity more than 50.", we are asked:
+"the buildings which have rooms" so we need column = [classroom.capacity]
+"rooms with capacity" so we need column = [classroom.building]
+Based on the columns and tables, we need these Foreign_keys = [].
+Based on the tables, columns, and Foreign_keys, The set of possible cell values are = [50]. So the Schema_links are:
+Schema_links: [classroom.building,classroom.capacity,50]
 
 Table Country, columns = [*,id,name]
 Table League, columns = [*,id,country_id,name]
@@ -449,7 +453,7 @@ OUTPUT_FILE = "./output/qt_predicted_sql.txt"
 # API_KEY = #key
 # os.environ["OPENAI_API_KEY"] = API_KEY
 openai.api_key = os.getenv("OPENAI_API_KEY")
-
+model = "gpt-3.5-turbo"
 
 def load_data(DATASET):
     return pd.read_json(DATASET)
@@ -595,12 +599,12 @@ def debuger(test_sample_text, database, sql):
 
 def GPT4_generation(prompt):
     response = openai.ChatCompletion.create(
-      model="gpt-4",
+      model=model,
       messages=[{"role": "user", "content": prompt}],
       n=1,
       stream=False,
       temperature=0.0,
-      max_tokens=600,
+      max_tokens=400,
       top_p=1.0,
       frequency_penalty=0.0,
       presence_penalty=0.0,
@@ -611,7 +615,7 @@ def GPT4_generation(prompt):
 
 def GPT4_debug(prompt):
     response = openai.ChatCompletion.create(
-      model="gpt-4",
+      model=model,
       messages=[{"role": "user", "content": prompt}],
       n=1,
       stream=False,
@@ -640,15 +644,18 @@ if __name__ == '__main__':
             try:
                 schema_linking_prompts = schema_linking_prompt_maker(row['question'], row['db_id'])
                 schema_links = GPT4_generation(schema_linking_prompts)
-            except Exception():
-                time.sleep(3)
-                pass
+            except Exception as e:
+                # time.sleep(3)
+                # pass
+                print(e)
+                break
         try:
             schema_links = schema_links.split("Schema_links: ")[1]
-        except Exception():
+        except Exception as e:
             print("Slicing error for the schema_linking module")
             schema_links = "[]"
-        # print(schema_links)
+        print(schema_links)
+
         classification = None
         while classification is None:
             try:
@@ -659,10 +666,12 @@ if __name__ == '__main__':
                 pass
         try:
             predicted_class = classification.split("Label: ")[1]
-        except Exception():
+        except Exception as e:
             print("Slicing error for the classification module")
             predicted_class = '"NESTED"'
-        # print(classification)
+        print(classification)
+        # break
+
         if '"EASY"' in predicted_class:
             print("EASY")
             SQL = None
@@ -670,9 +679,11 @@ if __name__ == '__main__':
                 try:
                     easy_prompt = easy_prompt_maker(row['question'], row['db_id'], schema_links)
                     SQL = GPT4_generation(easy_prompt)
-                except Exception():
-                    time.sleep(3)
-                    pass
+                except Exception as e:
+                    # time.sleep(3)
+                    # pass
+                    print(e)
+                    break
         elif '"NON-NESTED"' in predicted_class:
             print("NON-NESTED")
             SQL = None
@@ -680,12 +691,14 @@ if __name__ == '__main__':
                 try:
                     medium_prompt = medium_prompt_maker(row['question'], row['db_id'], schema_links)
                     SQL = GPT4_generation(medium_prompt)
-                except Exception():
-                    time.sleep(3)
-                    pass
+                except Exception as e:
+                    # time.sleep(3)
+                    # pass
+                    print(e)
+                    break
             try:
                 SQL = SQL.split("SQL: ")[1]
-            except Exception():
+            except Exception as e:
                 print("SQL slicing error")
                 SQL = "SELECT"
         else:
@@ -696,9 +709,11 @@ if __name__ == '__main__':
                 try:
                     hard_prompt = hard_prompt_maker(row['question'], row['db_id'], schema_links, sub_questions)
                     SQL = GPT4_generation(hard_prompt)
-                except Exception():
-                    time.sleep(3)
-                    pass
+                except Exception as e:
+                    # time.sleep(3)
+                    # pass
+                    print(e)
+                    break
             try:
                 SQL = SQL.split("SQL: ")[1]
             except Exception():
@@ -710,15 +725,19 @@ if __name__ == '__main__':
             try:
                 debuger_prompts = debuger(row['question'], row['db_id'], SQL)
                 debugged_SQL = GPT4_debug(debuger_prompts).replace("\n", " ")
-            except Exception():
-                time.sleep(3)
-                pass
+            except Exception as e:
+                    # time.sleep(3)
+                    # pass
+                    print(e)
+                    break
         SQL = "SELECT " + debugged_SQL
         print(SQL)
         CODEX.append([row['question'], SQL, row['query'], row['db_id']])
-        # break
+        break
+'''
     df = pd.DataFrame(CODEX, columns=['NLQ', 'PREDICTED SQL', 'GOLD SQL', 'DATABASE'])
     results = df['PREDICTED SQL'].tolist()
     with open(OUTPUT_FILE, 'w') as f:
         for line in results:
             f.write(f"{line}\n")
+'''
