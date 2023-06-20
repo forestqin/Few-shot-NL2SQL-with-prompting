@@ -106,8 +106,8 @@ if __name__ == '__main__':
         # while schema_links is None:
         #     try:
         s_promt = schema_linking_prompt_maker(row['question'], row['db_id'])
-        schema_links = gpt_completion_with_backoff(s_promt)
-        # schema_links = gpt_completion(s_promt)
+        # schema_links = gpt_completion_with_backoff(s_promt)
+        schema_links = gpt_completion(s_promt)
             # except:
         time.sleep(3)
             #     pass
@@ -117,8 +117,9 @@ if __name__ == '__main__':
             print("Slicing error for the schema_linking module")
             schema_links = "[]"
         print(schema_links)
-        count += 1
-        if count == 3: 
-            break
+        break
+        # count += 1
+        # if count == 3: 
+        #     break
     
 

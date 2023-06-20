@@ -22,8 +22,8 @@ QIAOJIANG_API = "http://qiaojiang.baidu-int.com/entry/common"
 QIAOJIANG_USER = "impl"
 QIAOJIANG_PWD = "LZ0fPkRKLjiPL1aK"
 HTTP_HEADERS = {'content-type': 'application/json'}
-model = "c_model"
-USE_BD = False
+model = "yiyan"
+USE_BD = True
 
 
 class ChatGPT:
